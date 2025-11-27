@@ -1,24 +1,21 @@
 [app]
-title = Stories
-package.name = storiesapp
-package.domain = org.novelsharing
-
+title = Kiro
+package.name = kiro
+package.domain = org.kiro
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,json
-
+source.include_exts = py,png,jpg,kv,atlas
+icon.filename = icon.png
 version = 1.0
-requirements = python3,kivy
-
+requirements = python3==3.10.6,hostpython3==3.10.6,kivy==2.2.1,pillow,android
 orientation = portrait
 fullscreen = 0
-
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-android.api = 31
+android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.accept_sdk_license = True
-
-android.archs = arm64-v8a,armeabi-v7a
+android.arch = armeabi-v7a
+android.gradle_dependencies = 
 
 [buildozer]
 log_level = 2
