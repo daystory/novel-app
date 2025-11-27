@@ -1,377 +1,293 @@
 from kivy.app import App
-from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
+from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.scrollview import ScrollView
 from kivy.uix.label import Label
-from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.scrollview import ScrollView
 from kivy.core.window import Window
-from kivy.graphics import Color, RoundedRectangle, Line
-from kivy.animation import Animation
+import requests
 import json
-import os
 
-Window.clearcolor = (0.05, 0.05, 0.08, 1)
+# Supabase 설정
+SUPABASE_URL = "https://ikhjpmtstqhykviedghn.supabase.co"
+SUPABASE_KEY = "sb_publishable_tVA9kKSGhT7UKqVTHbdsCA_ynflRRNU"
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json"
+}
 
-class Novel:
-    def __init__(self, title, author, content):
-        self.title = title
-        self.author = author
-        self.content = content
-
-class NovelStorage:
-    def __init__(self):
-        self.filename = 'novels.json'
-        self.novels = self.load_novels()
-    
-    def load_novels(self):
-        if os.path.exists(self.filename):
-            try:
-                with open(self.filename, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    return [Novel(n['title'], n['author'], n['content']) for n in data]
-            except:
-                return self.get_sample_novels()
-        return self.get_sample_novels()
-    
-    def get_sample_novels(self):
-        return [
-            Novel("별빛 아래서", "김작가", "밤하늘의 별을 바라보며 나는 생각했다.\n\n그 빛이 수백 년 전의 것이라는 사실을...\n\n우리가 보는 모든 것은 과거의 기억일 뿐이다."),
-            Novel("도시의 밤", "이작가", "네온사인이 반짝이는 거리.\n\n수많은 사람들이 지나가지만\n\n모두가 외로워 보였다."),
-            Novel("첫눈", "박작가", "창밖으로 하얀 눈이 내린다.\n\n올해의 첫눈.\n\n당신과 함께 보고 싶었다.")
-        ]
-    
-    def save_novels(self):
-        data = [{'title': n.title, 'author': n.author, 'content': n.content} for n in self.novels]
-        with open(self.filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    def add_novel(self, novel):
-        self.novels.insert(0, novel)
-        self.save_novels()
-
-class ModernButton(Button):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.background_normal = ''
-        self.background_color = (0, 0, 0, 0)
-        with self.canvas.before:
-            self.bg_color = Color(0.15, 0.15, 0.2, 1)
-            self.bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[12])
-        self.bind(pos=self.update_bg, size=self.update_bg)
-    
-    def update_bg(self, *args):
-        self.bg_rect.pos = self.pos
-        self.bg_rect.size = self.size
-
-class PrimaryButton(ModernButton):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.bg_color.rgba = (0.4, 0.35, 0.85, 1)
+Window.clearcolor = (0.05, 0.05, 0.1, 1)
 
 class HomeScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.storage = NovelStorage()
-        self.build_ui()
-    
-    def build_ui(self):
-        layout = BoxLayout(orientation='vertical', padding=20, spacing=20)
+        layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
         
-        header = BoxLayout(size_hint_y=0.12, spacing=15)
-        title_label = Label(
-            text='Stories',
+        # 제목
+        title = Label(
+            text='Kiro',
             font_size='32sp',
-            bold=True,
-            color=(1, 1, 1, 1),
-            font_name='Roboto'
+            size_hint_y=0.15,
+            color=(0.8, 0.6, 1, 1)
         )
-        write_btn = PrimaryButton(
-            text='Write',
-            size_hint_x=0.25,
-            color=(1, 1, 1, 1),
-            font_size='16sp'
+        layout.add_widget(title)
+        
+        # 소설 목록 스크롤
+        scroll = ScrollView(size_hint=(1, 0.7))
+        self.novels_layout = BoxLayout(orientation='vertical', spacing=10, size_hint_y=None)
+        self.novels_layout.bind(minimum_height=self.novels_layout.setter('height'))
+        scroll.add_widget(self.novels_layout)
+        layout.add_widget(scroll)
+        
+        # 새로고침 버튼
+        refresh_btn = Button(
+            text='새로고침',
+            size_hint_y=0.08,
+            background_color=(0.6, 0.4, 0.8, 1),
+            color=(1, 1, 1, 1)
+        )
+        refresh_btn.bind(on_press=self.load_novels)
+        layout.add_widget(refresh_btn)
+        
+        # 쓰기 버튼
+        write_btn = Button(
+            text='새 소설 쓰기',
+            size_hint_y=0.08,
+            background_color=(0.8, 0.4, 0.8, 1),
+            color=(1, 1, 1, 1)
         )
         write_btn.bind(on_press=self.go_to_write)
-        header.add_widget(title_label)
-        header.add_widget(write_btn)
+        layout.add_widget(write_btn)
         
-        scroll = ScrollView()
-        self.novels_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None)
-        self.novels_layout.bind(minimum_height=self.novels_layout.setter('height'))
-        
-        self.refresh_novels()
-        
-        scroll.add_widget(self.novels_layout)
-        layout.add_widget(header)
-        layout.add_widget(scroll)
         self.add_widget(layout)
     
-    def refresh_novels(self):
+    def on_enter(self):
+        self.load_novels()
+    
+    def load_novels(self, *args):
         self.novels_layout.clear_widgets()
-        self.storage.novels = self.storage.load_novels()
-        
-        for novel in self.storage.novels:
-            card = BoxLayout(
-                orientation='vertical',
+        try:
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/novels?select=*&order=created_at.desc",
+                headers=HEADERS
+            )
+            if response.status_code == 200:
+                novels = response.json()
+                if novels:
+                    for novel in novels:
+                        btn = Button(
+                            text=f"{novel['title']}\n작가: {novel['author']} | 조회수: {novel['views']}",
+                            size_hint_y=None,
+                            height=80,
+                            background_color=(0.15, 0.15, 0.25, 1),
+                            color=(1, 1, 1, 1)
+                        )
+                        btn.bind(on_press=lambda x, n=novel: self.open_novel(n))
+                        self.novels_layout.add_widget(btn)
+                else:
+                    self.novels_layout.add_widget(Label(
+                        text='아직 소설이 없어요\n첫 번째 작가가 되어보세요!',
+                        size_hint_y=None,
+                        height=100,
+                        color=(0.7, 0.7, 0.7, 1)
+                    ))
+            else:
+                self.novels_layout.add_widget(Label(
+                    text=f'불러오기 실패\n상태 코드: {response.status_code}',
+                    size_hint_y=None,
+                    height=100,
+                    color=(1, 0.3, 0.3, 1)
+                ))
+        except Exception as e:
+            self.novels_layout.add_widget(Label(
+                text=f'오류 발생:\n{str(e)}',
                 size_hint_y=None,
-                height=140,
-                padding=20,
-                spacing=8
-            )
-            
-            with card.canvas.before:
-                Color(0.12, 0.12, 0.16, 1)
-                card.rect = RoundedRectangle(pos=card.pos, size=card.size, radius=[16])
-                card.bind(pos=lambda x, y, rect=card.rect: setattr(rect, 'pos', x.pos))
-                card.bind(size=lambda x, y, rect=card.rect: setattr(rect, 'size', x.size))
-            
-            title_label = Label(
-                text=novel.title,
-                font_size='22sp',
-                bold=True,
-                color=(1, 1, 1, 1),
-                size_hint_y=0.35,
-                halign='left',
-                valign='middle'
-            )
-            title_label.bind(size=title_label.setter('text_size'))
-            
-            author_label = Label(
-                text=novel.author,
-                font_size='14sp',
-                color=(0.6, 0.6, 0.7, 1),
-                size_hint_y=0.25,
-                halign='left',
-                valign='middle'
-            )
-            author_label.bind(size=author_label.setter('text_size'))
-            
-            preview = novel.content[:40] + '...' if len(novel.content) > 40 else novel.content
-            preview = preview.replace('\n', ' ')
-            content_label = Label(
-                text=preview,
-                font_size='13sp',
-                color=(0.5, 0.5, 0.6, 1),
-                size_hint_y=0.25,
-                halign='left',
-                valign='middle'
-            )
-            content_label.bind(size=content_label.setter('text_size'))
-            
-            btn_layout = BoxLayout(size_hint_y=0.15)
-            btn = Button(
-                text='Read',
-                size_hint_x=0.3,
-                background_normal='',
-                background_color=(0, 0, 0, 0),
-                color=(0.6, 0.55, 1, 1),
-                font_size='14sp'
-            )
-            btn.bind(on_press=lambda x, n=novel: self.read_novel(n))
-            btn_layout.add_widget(Label())
-            btn_layout.add_widget(btn)
-            
-            card.add_widget(title_label)
-            card.add_widget(author_label)
-            card.add_widget(content_label)
-            card.add_widget(btn_layout)
-            
-            self.novels_layout.add_widget(card)
+                height=100,
+                color=(1, 0.3, 0.3, 1)
+            ))
     
-    def go_to_write(self, instance):
-        self.manager.current = 'write'
+    def open_novel(self, novel):
+        app = App.get_running_app()
+        app.root.get_screen('read').display_novel(novel)
+        app.root.current = 'read'
     
-    def read_novel(self, novel):
-        read_screen = self.manager.get_screen('read')
-        read_screen.display_novel(novel)
-        self.manager.current = 'read'
+    def go_to_write(self, *args):
+        App.get_running_app().root.current = 'write'
 
 class WriteScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.build_ui()
-    
-    def build_ui(self):
         layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
         
-        header = BoxLayout(size_hint_y=0.1, spacing=15)
-        back_btn = ModernButton(
-            text='← Back',
-            size_hint_x=0.25,
-            color=(0.7, 0.7, 0.8, 1),
-            font_size='15sp'
-        )
-        back_btn.bind(on_press=self.go_back)
+        # 제목
         title_label = Label(
-            text='New Story',
-            font_size='28sp',
-            bold=True,
+            text='새 소설 쓰기',
+            font_size='24sp',
+            size_hint_y=0.08,
+            color=(0.8, 0.6, 1, 1)
+        )
+        layout.add_widget(title_label)
+        
+        # 작가 이름
+        layout.add_widget(Label(text='작가 이름', size_hint_y=0.05, color=(0.9, 0.9, 0.9, 1)))
+        self.author_input = TextInput(
+            hint_text='당신의 필명을 입력하세요',
+            size_hint_y=0.08,
+            multiline=False,
+            background_color=(0.2, 0.2, 0.3, 1),
+            foreground_color=(1, 1, 1, 1)
+        )
+        layout.add_widget(self.author_input)
+        
+        # 소설 제목
+        layout.add_widget(Label(text='제목', size_hint_y=0.05, color=(0.9, 0.9, 0.9, 1)))
+        self.title_input = TextInput(
+            hint_text='소설 제목',
+            size_hint_y=0.08,
+            multiline=False,
+            background_color=(0.2, 0.2, 0.3, 1),
+            foreground_color=(1, 1, 1, 1)
+        )
+        layout.add_widget(self.title_input)
+        
+        # 내용
+        layout.add_widget(Label(text='내용', size_hint_y=0.05, color=(0.9, 0.9, 0.9, 1)))
+        self.content_input = TextInput(
+            hint_text='여기에 소설을 작성하세요...',
+            size_hint_y=0.5,
+            multiline=True,
+            background_color=(0.2, 0.2, 0.3, 1),
+            foreground_color=(1, 1, 1, 1)
+        )
+        layout.add_widget(self.content_input)
+        
+        # 버튼들
+        btn_layout = BoxLayout(size_hint_y=0.08, spacing=10)
+        
+        cancel_btn = Button(
+            text='취소',
+            background_color=(0.4, 0.4, 0.5, 1),
             color=(1, 1, 1, 1)
         )
-        header.add_widget(back_btn)
-        header.add_widget(title_label)
+        cancel_btn.bind(on_press=self.go_back)
+        btn_layout.add_widget(cancel_btn)
         
-        self.title_input = TextInput(
-            hint_text='Title',
-            size_hint_y=0.08,
-            multiline=False,
-            font_size='18sp',
-            background_color=(0.12, 0.12, 0.16, 1),
-            foreground_color=(1, 1, 1, 1),
-            hint_text_color=(0.5, 0.5, 0.6, 1),
-            cursor_color=(0.6, 0.55, 1, 1),
-            padding=[15, 12]
-        )
-        
-        self.author_input = TextInput(
-            hint_text='Author',
-            size_hint_y=0.08,
-            multiline=False,
-            font_size='16sp',
-            background_color=(0.12, 0.12, 0.16, 1),
-            foreground_color=(1, 1, 1, 1),
-            hint_text_color=(0.5, 0.5, 0.6, 1),
-            cursor_color=(0.6, 0.55, 1, 1),
-            padding=[15, 12]
-        )
-        
-        self.content_input = TextInput(
-            hint_text='Start writing your story...',
-            multiline=True,
-            font_size='16sp',
-            background_color=(0.12, 0.12, 0.16, 1),
-            foreground_color=(1, 1, 1, 1),
-            hint_text_color=(0.5, 0.5, 0.6, 1),
-            cursor_color=(0.6, 0.55, 1, 1),
-            padding=[15, 15]
-        )
-        
-        save_btn = PrimaryButton(
-            text='Publish',
-            size_hint_y=0.1,
-            color=(1, 1, 1, 1),
-            font_size='17sp',
-            bold=True
+        save_btn = Button(
+            text='업로드',
+            background_color=(0.8, 0.4, 0.8, 1),
+            color=(1, 1, 1, 1)
         )
         save_btn.bind(on_press=self.save_novel)
+        btn_layout.add_widget(save_btn)
         
-        layout.add_widget(header)
-        layout.add_widget(self.title_input)
-        layout.add_widget(self.author_input)
-        layout.add_widget(self.content_input)
-        layout.add_widget(save_btn)
+        layout.add_widget(btn_layout)
+        
         self.add_widget(layout)
     
-    def save_novel(self, instance):
-        title = self.title_input.text.strip()
+    def save_novel(self, *args):
         author = self.author_input.text.strip()
+        title = self.title_input.text.strip()
         content = self.content_input.text.strip()
         
-        if title and author and content:
-            home_screen = self.manager.get_screen('home')
-            novel = Novel(title, author, content)
-            home_screen.storage.add_novel(novel)
-            home_screen.refresh_novels()
-            
-            self.title_input.text = ''
-            self.author_input.text = ''
-            self.content_input.text = ''
-            
-            self.manager.current = 'home'
+        if not author or not title or not content:
+            return
+        
+        try:
+            data = {
+                "author": author,
+                "title": title,
+                "content": content,
+                "views": 0
+            }
+            response = requests.post(
+                f"{SUPABASE_URL}/rest/v1/novels",
+                headers=HEADERS,
+                json=data
+            )
+            if response.status_code == 201:
+                self.author_input.text = ''
+                self.title_input.text = ''
+                self.content_input.text = ''
+                App.get_running_app().root.current = 'home'
+        except Exception as e:
+            print(f"업로드 오류: {e}")
     
-    def go_back(self, instance):
-        self.manager.current = 'home'
+    def go_back(self, *args):
+        App.get_running_app().root.current = 'home'
 
 class ReadScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.build_ui()
-    
-    def build_ui(self):
         layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
-        
-        header = BoxLayout(size_hint_y=0.08, spacing=15)
-        back_btn = ModernButton(
-            text='← Back',
-            size_hint_x=0.25,
-            color=(0.7, 0.7, 0.8, 1),
-            font_size='15sp'
-        )
-        back_btn.bind(on_press=self.go_back)
-        header.add_widget(back_btn)
-        header.add_widget(Label(text=''))
         
         self.title_label = Label(
             text='',
-            font_size='28sp',
-            bold=True,
+            font_size='24sp',
             size_hint_y=0.1,
-            color=(1, 1, 1, 1),
-            halign='left',
-            valign='middle'
+            color=(0.8, 0.6, 1, 1)
         )
-        self.title_label.bind(size=self.title_label.setter('text_size'))
+        layout.add_widget(self.title_label)
         
         self.author_label = Label(
             text='',
-            font_size='15sp',
+            font_size='14sp',
             size_hint_y=0.05,
-            color=(0.6, 0.6, 0.7, 1),
-            halign='left',
-            valign='middle'
+            color=(0.7, 0.7, 0.7, 1)
         )
-        self.author_label.bind(size=self.author_label.setter('text_size'))
+        layout.add_widget(self.author_label)
         
-        separator = BoxLayout(size_hint_y=0.005)
-        with separator.canvas:
-            Color(0.2, 0.2, 0.25, 1)
-            separator.line = Line(points=[0, 0, 100, 0], width=1)
-        separator.bind(pos=self.update_line, size=self.update_line)
-        
-        scroll = ScrollView()
+        scroll = ScrollView(size_hint=(1, 0.75))
         self.content_label = Label(
             text='',
-            font_size='17sp',
+            font_size='16sp',
             size_hint_y=None,
-            color=(0.85, 0.85, 0.9, 1),
-            halign='left',
-            valign='top',
-            padding=(5, 20),
-            line_height=1.5
+            color=(0.95, 0.95, 0.95, 1),
+            text_size=(Window.width - 60, None)
         )
-        self.content_label.bind(
-            texture_size=self.content_label.setter('size'),
-            size=self.content_label.setter('text_size')
-        )
+        self.content_label.bind(texture_size=self.content_label.setter('size'))
         scroll.add_widget(self.content_label)
-        
-        layout.add_widget(header)
-        layout.add_widget(self.title_label)
-        layout.add_widget(self.author_label)
-        layout.add_widget(separator)
         layout.add_widget(scroll)
+        
+        back_btn = Button(
+            text='목록으로',
+            size_hint_y=0.08,
+            background_color=(0.6, 0.4, 0.8, 1),
+            color=(1, 1, 1, 1)
+        )
+        back_btn.bind(on_press=self.go_back)
+        layout.add_widget(back_btn)
+        
         self.add_widget(layout)
-    
-    def update_line(self, instance, value):
-        instance.line.points = [instance.x, instance.y, instance.right, instance.y]
+        self.current_novel_id = None
     
     def display_novel(self, novel):
-        self.title_label.text = novel.title
-        self.author_label.text = f'by {novel.author}'
-        self.content_label.text = novel.content
+        self.current_novel_id = novel['id']
+        self.title_label.text = novel['title']
+        self.author_label.text = f"작가: {novel['author']} | 조회수: {novel['views']}"
+        self.content_label.text = novel['content']
+        
+        # 조회수 증가
+        try:
+            requests.patch(
+                f"{SUPABASE_URL}/rest/v1/novels?id=eq.{novel['id']}",
+                headers=HEADERS,
+                json={"views": novel['views'] + 1}
+            )
+        except:
+            pass
     
-    def go_back(self, instance):
-        self.manager.current = 'home'
+    def go_back(self, *args):
+        App.get_running_app().root.current = 'home'
 
-class NovelApp(App):
+class KiroApp(App):
     def build(self):
-        sm = ScreenManager(transition=FadeTransition(duration=0.2))
+        sm = ScreenManager()
         sm.add_widget(HomeScreen(name='home'))
         sm.add_widget(WriteScreen(name='write'))
         sm.add_widget(ReadScreen(name='read'))
         return sm
 
 if __name__ == '__main__':
-    NovelApp().run()
+    KiroApp().run()
