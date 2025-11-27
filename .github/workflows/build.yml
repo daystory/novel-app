@@ -7,11 +7,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -21,15 +20,36 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk wget
-        pip install buildozer cython
-
-    - name: Build APK with Buildozer
+        sudo apt-get install -y \
+          python3-pip \
+          build-essential \
+          git \
+          ffmpeg \
+          libsdl2-dev \
+          libsdl2-image-dev \
+          libsdl2-mixer-dev \
+          libsdl2-ttf-dev \
+          libportmidi-dev \
+          libswscale-dev \
+          libavformat-dev \
+          libavcodec-dev \
+          zlib1g-dev \
+          openjdk-17-jdk \
+          unzip
+        
+    - name: Install Buildozer and Cython
       run: |
-        buildozer android debug
-
+        pip3 install --upgrade pip
+        pip3 install --upgrade setuptools
+        pip3 install --upgrade Cython==0.29.33
+        pip3 install buildozer==1.5.0
+        
+    - name: Build APK
+      run: |
+        yes | buildozer android debug
+        
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: stories-app
+        name: Kiro-App
         path: bin/*.apk
